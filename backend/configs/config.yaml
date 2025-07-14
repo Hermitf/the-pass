@@ -1,0 +1,14 @@
+# 后端服务端口
+server:
+  port: 8080
+# 数据库配置
+database:
+  host: "localhost"
+  port: 5432
+  username: "the_pass"
+  password: "the_pass"
+  db_name: "the_pass_db"
+# JWT配置
+jwt:
+  secret_key: "3Bde3BGEbYqtqyEUzW3ry8jKFcaPH17fRmTmqE7MDr05Lwj95uruRKrrkb44TJ4s"
+  expires_in: 43200 # 12小时
