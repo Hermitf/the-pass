@@ -9,7 +9,7 @@ import (
 )
 
 func setupRouter() *gin.Engine {
-	
+
 	// 创建默认路由
 	router := gin.Default()
 

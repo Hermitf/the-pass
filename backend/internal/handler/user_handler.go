@@ -27,7 +27,7 @@ func (h *UserHandler) LoginHandler(c *gin.Context) {
 	}
 
 	// 直接传递字段值
-    token, err := h.userService.LoginUser(loginReq.LoginInfo, loginReq.Password, loginReq.LoginType)
+	token, err := h.userService.LoginUser(loginReq.LoginInfo, loginReq.Password, loginReq.LoginType)
 	if err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
 		return

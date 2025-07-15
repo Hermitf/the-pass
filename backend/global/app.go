@@ -3,8 +3,8 @@ package global
 import (
 	"log"
 
-	"github.com/jinzhu/gorm"
 	"github.com/fsnotify/fsnotify"
+	"github.com/jinzhu/gorm"
 	"github.com/spf13/viper"
 
 	"github.com/Hermitf/the-pass/configs"
@@ -45,9 +45,9 @@ func (a *Application) InitConfig() error {
 		log.Fatal("解析配置文件失败: ", err)
 		return err
 	}
-	
-    a.ConfigViper = v
-    return nil
+
+	a.ConfigViper = v
+	return nil
 }
 
 var App = new(Application)
