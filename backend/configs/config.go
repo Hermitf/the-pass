@@ -15,3 +15,8 @@ type DatabaseConfig struct {
 	Password string `mapstructure:"password" json:"password" yaml:"password"`
 	DbName   string `mapstructure:"db_name" json:"db_name" yaml:"db_name"`
 }
+
+type JWTConfig struct {
+	SecretKey string `mapstructure:"secret_key" json:"secret_key" yaml:"secret_key"`
+	ExpiresIn int64  `mapstructure:"expires_in" json:"expires_in" yaml:"expires_in"`
+}
