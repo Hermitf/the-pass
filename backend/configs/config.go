@@ -5,9 +5,17 @@ type Configuration struct {
 	Database DatabaseConfig `mapstructure:"database" json:"database" yaml:"database"`
 	JWT      JWTConfig      `mapstructure:"jwt" json:"jwt" yaml:"jwt"`
 }
-type ServerConfig struct {
-	Port int `mapstructure:"port" json:"port" yaml:"port"`
+
+type CORSConfig struct {
+	AllowedOrigins []string `mapstructure:"allowed_origins" json:"allowed_origins" yaml:"allowed_origins"`
+	AllowedMethods []string `mapstructure:"allowed_methods" json:"allowed_methods" yaml:"allowed_methods"`
 }
+
+type ServerConfig struct {
+	Port int        `mapstructure:"port" json:"port" yaml:"port"`
+	CORS CORSConfig `mapstructure:"cors" json:"cors" yaml:"cors"`
+}
+
 type DatabaseConfig struct {
 	Host     string `mapstructure:"host" json:"host" yaml:"host"`
 	Port     int    `mapstructure:"port" json:"port" yaml:"port"`

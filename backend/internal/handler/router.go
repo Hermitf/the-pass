@@ -1,11 +1,15 @@
 package handler
 
 import (
+	"gorm.io/gorm"
+	"time"
+
+	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
-	"gorm.io/gorm"
 
+	"github.com/Hermitf/the-pass/global"
 	"github.com/Hermitf/the-pass/internal/middleware"
 	"github.com/Hermitf/the-pass/internal/repository"
 	"github.com/Hermitf/the-pass/internal/service"
@@ -14,6 +18,16 @@ import (
 // create a new Gin router and set up the routes
 func SetupRouter(db *gorm.DB) *gin.Engine {
 	router := gin.Default()
+
+	// 从配置获取CORS设置
+	corsConfig := cors.Config{
+		AllowOrigins:     global.App.Configs.Server.CORS.AllowedOrigins,
+		AllowMethods:     global.App.Configs.Server.CORS.AllowedMethods,
+		AllowHeaders:     []string{"Origin", "Content-Type", "Authorization", "Accept"},
+		AllowCredentials: true,
+		MaxAge:           12 * time.Hour,
+	}
+	router.Use(cors.New(corsConfig))
 
 	// add Swagger documentation
 	router.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
