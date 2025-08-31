@@ -61,7 +61,7 @@ func TestPasswordFunctions(t *testing.T) {
 
 	for _, tt := range testCases {
 		t.Run(tt.name, func(t *testing.T) {
-			// 1. 测试密码哈希生成
+			// 测试密码哈希生成
 			hash, err := GeneratePasswordHash(tt.password)
 			if tt.shouldHash {
 				if err != nil {
@@ -71,14 +71,14 @@ func TestPasswordFunctions(t *testing.T) {
 					t.Errorf("GeneratePasswordHash(%q) should return non-empty hash", tt.password)
 				}
 
-				// 2. 测试密码验证
-				if !VerifyPassword(tt.password, hash) {
-					t.Errorf("VerifyPassword(%q, hash) should return true", tt.password)
+				// 测试密码验证
+				if flag, err := VerifyPassword(tt.password, hash); flag {
+					t.Errorf("VerifyPassword(%q, hash) should return nil error, got: %v", tt.password, err)
 				}
 
 				// 验证错误密码
-				if VerifyPassword("wrongpassword", hash) {
-					t.Errorf("VerifyPassword(wrongpassword, hash) should return false")
+				if flag, err := VerifyPassword("wrongpassword", hash); flag {
+					t.Errorf("VerifyPassword(wrongpassword, hash) should return error, got: %v", err)
 				}
 			} else {
 				if err == nil {
@@ -194,9 +194,11 @@ func TestPasswordEdgeCases(t *testing.T) {
 				hash = string(validHash)
 			}
 
-			got := VerifyPassword(tt.password, hash)
-			if got != tt.expected {
-				t.Errorf("VerifyPassword(%q, %q) = %v; want %v", tt.password, hash, got, tt.expected)
+			if flag, err := VerifyPassword(tt.password, hash); flag {
+				got := err == nil
+				if got != tt.expected {
+					t.Errorf("VerifyPassword(%q, %q) = %v; want %v", tt.password, hash, got, tt.expected)
+				}
 			}
 		})
 	}

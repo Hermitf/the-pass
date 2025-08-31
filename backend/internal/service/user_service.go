@@ -48,8 +48,8 @@ func (s *UserService) LoginUser(loginInfo string, password string, loginType str
 		}
 
 		// 邮箱只支持密码登录
-		if !userutils.VerifyPassword(password, user.PasswordHash) {
-			return "", errors.New("密码错误")
+		if flag, err := userutils.VerifyPassword(password, user.PasswordHash); !flag {
+			return "", err
 		}
 	} else if userutils.IsPhone(loginInfo) {
 		user, err = s.userRepo.GetByPhone(loginInfo)
@@ -59,8 +59,8 @@ func (s *UserService) LoginUser(loginInfo string, password string, loginType str
 		switch loginType {
 		case "password":
 			// 手机号密码登录
-			if !userutils.VerifyPassword(password, user.PasswordHash) {
-				return "", errors.New("密码错误")
+			if flag, err := userutils.VerifyPassword(password, user.PasswordHash); !flag {
+				return "", err
 			}
 		case "sms":
 			// 手机号验证码登录
@@ -77,8 +77,8 @@ func (s *UserService) LoginUser(loginInfo string, password string, loginType str
 			return "", err
 		}
 
-		if !userutils.VerifyPassword(password, user.PasswordHash) {
-			return "", errors.New("密码错误")
+		if flag, err := userutils.VerifyPassword(password, user.PasswordHash); !flag {
+			return "", err
 		}
 	}
 
@@ -144,4 +144,21 @@ func (s *UserService) logSMSSent(phone string, userID int64) {
 	// 记录发送时间、手机号、用户ID等信息
 	log.Printf("短信发送记录 - 手机号: %s, 用户ID: %d, 时间: %s",
 		phone, userID, time.Now().Format("2006-01-02 15:04:05"))
+}
+
+// ==== profile related methods ====
+
+func (s *UserService) GetUserProfile(userID uint) (*model.User, error) {
+	if user, err := s.userRepo.GetUserByID(userID); err != nil {
+		return nil, err
+	} else {
+		return user, nil
+	}
+}
+
+func (s *UserService) UpdateUserProfile(userID uint, username, email, phone string) error {
+	if err := s.userRepo.UpdateUserProfile(userID, username, email, phone); err != nil {
+		return err
+	}
+	return nil
 }

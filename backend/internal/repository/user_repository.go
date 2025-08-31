@@ -52,3 +52,23 @@ func (r *UserRepository) GetByPhone(phone string) (*model.User, error) {
 	}
 	return &user, nil
 }
+
+// ==== profile related methods ====
+
+// GetUserProfile retrieves a user's profile by ID
+func (r *UserRepository) GetUserByID(id uint) (*model.User, error) {
+	var user model.User
+	if err := r.db.Where("id = ?", id).First(&user).Error; err != nil {
+		return nil, err
+	}
+	return &user, nil
+}
+
+// UpdateUserProfile updates a user's profile information
+func (r *UserRepository) UpdateUserProfile(userID uint, username, email, phone string) error {
+	return r.db.Model(&model.User{}).Where("id = ?", userID).Updates(map[string]interface{}{
+		"username": username,
+		"email":    email,
+		"phone":    phone,
+	}).Error
+}

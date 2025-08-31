@@ -1,0 +1,350 @@
+basePath: /api/v1
+definitions:
+  handler.ErrorResponse:
+    properties:
+      error:
+        example: Invalid request
+        type: string
+    type: object
+  handler.LoginRequest:
+    properties:
+      login_info:
+        example: user@example.com
+        type: string
+      login_type:
+        description: '"password" 或 "sms"'
+        example: password
+        type: string
+      password:
+        example: password123
+        type: string
+    required:
+    - login_info
+    - password
+    type: object
+  handler.LoginResponse:
+    properties:
+      message:
+        example: Login successful
+        type: string
+      token:
+        example: jwt_token
+        type: string
+    required:
+    - token
+    type: object
+  handler.ProfileRequest:
+    properties:
+      email:
+        example: updated_user@example.com
+        type: string
+      phone:
+        example: "1234567890"
+        type: string
+      username:
+        example: updated_user
+        type: string
+    required:
+    - email
+    - phone
+    - username
+    type: object
+  handler.RefreshRequest:
+    properties:
+      token:
+        example: jwt_token
+        type: string
+    required:
+    - token
+    type: object
+  handler.RefreshResponse:
+    properties:
+      message:
+        example: Token refreshed successfully
+        type: string
+      token:
+        example: new_jwt_token
+        type: string
+      user_id:
+        description: User ID for the refreshed token
+        example: 123
+        type: integer
+    type: object
+  handler.RegisterRequest:
+    properties:
+      email:
+        example: user@example.com
+        type: string
+      password:
+        example: password123
+        type: string
+      phone:
+        example: "1234567890"
+        type: string
+      username:
+        example: new_user
+        type: string
+    required:
+    - email
+    - password
+    - phone
+    - username
+    type: object
+  handler.RegisterResponse:
+    properties:
+      status:
+        example: Registration successful
+        type: string
+    type: object
+  handler.UserProfileResponse:
+    properties:
+      email:
+        example: user@example.com
+        type: string
+      id:
+        example: 123
+        type: integer
+      phone:
+        example: "1234567890"
+        type: string
+      username:
+        example: user123
+        type: string
+    type: object
+  handler.VerifyRequest:
+    properties:
+      token:
+        example: jwt_token
+        type: string
+    required:
+    - token
+    type: object
+  handler.VerifyResponse:
+    properties:
+      user_id:
+        example: 123
+        type: integer
+      valid:
+        example: true
+        type: boolean
+    type: object
+host: localhost:13544
+info:
+  contact:
+    email: api_support@the-pass.com
+    name: API Support
+    url: http://www.swagger.io/support
+  description: The Pass API文档
+  license:
+    name: Apache 2.0
+    url: http://www.apache.org/licenses/LICENSE-2.0.html
+  termsOfService: http://swagger.io/terms/
+  title: The Pass API
+  version: "1.0"
+paths:
+  /auth/refresh:
+    post:
+      consumes:
+      - application/json
+      description: Refresh an existing JWT token
+      parameters:
+      - description: JWT token to refresh
+        in: body
+        name: token
+        required: true
+        schema:
+          $ref: '#/definitions/handler.RefreshRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Token refreshed successfully
+          schema:
+            $ref: '#/definitions/handler.RefreshResponse'
+        "400":
+          description: Invalid request
+          schema:
+            $ref: '#/definitions/handler.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/handler.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/handler.ErrorResponse'
+      summary: Refresh JWT token
+      tags:
+      - auth
+  /auth/verify:
+    post:
+      consumes:
+      - application/json
+      description: Verify the validity of a JWT token
+      parameters:
+      - description: JWT token to verify
+        in: body
+        name: token
+        required: true
+        schema:
+          $ref: '#/definitions/handler.VerifyRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Token is valid
+          schema:
+            $ref: '#/definitions/handler.VerifyResponse'
+        "400":
+          description: Invalid request
+          schema:
+            $ref: '#/definitions/handler.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/handler.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/handler.ErrorResponse'
+      summary: Verify JWT token
+      tags:
+      - auth
+  /users/login:
+    post:
+      consumes:
+      - application/json
+      description: Login an existing user
+      parameters:
+      - description: User login information
+        in: body
+        name: login
+        required: true
+        schema:
+          $ref: '#/definitions/handler.LoginRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Login successful
+          schema:
+            $ref: '#/definitions/handler.LoginResponse'
+        "400":
+          description: Invalid request
+          schema:
+            $ref: '#/definitions/handler.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/handler.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/handler.ErrorResponse'
+      summary: user login
+      tags:
+      - users
+  /users/profile:
+    get:
+      consumes:
+      - application/json
+      description: Get the profile of the logged-in user
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: User profile retrieved successfully
+          schema:
+            $ref: '#/definitions/handler.UserProfileResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/handler.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/handler.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get user profile
+      tags:
+      - users
+    put:
+      consumes:
+      - application/json
+      description: Update the profile of the logged-in user
+      parameters:
+      - description: User profile information
+        in: body
+        name: profile
+        required: true
+        schema:
+          $ref: '#/definitions/handler.ProfileRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: User profile updated successfully
+          schema:
+            $ref: '#/definitions/handler.UserProfileResponse'
+        "400":
+          description: Invalid request
+          schema:
+            $ref: '#/definitions/handler.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/handler.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/handler.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Update user profile
+      tags:
+      - users
+  /users/register:
+    post:
+      consumes:
+      - application/json
+      description: Register a new user
+      parameters:
+      - description: User registration information
+        in: body
+        name: user
+        required: true
+        schema:
+          $ref: '#/definitions/handler.RegisterRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Registration successful
+          schema:
+            $ref: '#/definitions/handler.RegisterResponse'
+        "400":
+          description: Invalid request
+          schema:
+            $ref: '#/definitions/handler.ErrorResponse'
+        "409":
+          description: User already exists
+          schema:
+            $ref: '#/definitions/handler.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/handler.ErrorResponse'
+      summary: user registration
+      tags:
+      - users
+schemes:
+- http
+- https
+securityDefinitions:
+  BearerAuth:
+    description: '使用Bearer Token进行认证，格式: Bearer {token}'
+    in: header
+    name: Authorization
+    type: apiKey
+swagger: "2.0"

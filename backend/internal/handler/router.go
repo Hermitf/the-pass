@@ -1,37 +1,57 @@
 package handler
 
 import (
+	"github.com/gin-gonic/gin"
+	swaggerFiles "github.com/swaggo/files"
+	ginSwagger "github.com/swaggo/gin-swagger"
+	"gorm.io/gorm"
+
+	"github.com/Hermitf/the-pass/internal/middleware"
 	"github.com/Hermitf/the-pass/internal/repository"
 	"github.com/Hermitf/the-pass/internal/service"
-	"github.com/gin-gonic/gin"
-	"gorm.io/gorm"
 )
 
-// 创建路由
-func CreateRouter() *gin.Engine {
+// create a new Gin router and set up the routes
+func SetupRouter(db *gorm.DB) *gin.Engine {
 	router := gin.Default()
 
-	// 临时创建服务实例 - 实际应该注入数据库连接
-	var db *gorm.DB // 这里需要实际的数据库连接
+	// add Swagger documentation
+	router.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
+
+	// create service instances
 	userRepo := repository.NewUserRepository(db)
 	userService := service.NewUserService(userRepo)
 	jwtService := service.NewJWTService()
 
-	// 添加路由
-	AddPublicRoutes(router, userService, jwtService)
+	// create handler instances
+	userHandler := NewUserHandler(userService)
+
+	// set up API routes
+	api := router.Group("/api")
+	{
+		v1 := api.Group("/v1")
+		{
+
+			// User related API
+			users := v1.Group("/users")
+			{
+				// 无需认证的接口
+				users.POST("/register", userHandler.RegisterHandler) // POST /api/v1/users/register
+				users.POST("/login", userHandler.LoginHandler)       // POST /api/v1/users/login
+
+				// 需要认证的接口
+				authenticated := users.Group("")
+				authenticated.Use(middleware.JWTAuthMiddleware(jwtService)) // ← 这行很关键
+				{
+					authenticated.GET("/profile", userHandler.GetProfileHandler)
+					authenticated.PUT("/profile", userHandler.UpdateProfileHandler)
+				}
+				// users.Use(middleware.JWTAuthMiddleware(jwtService)) // Use JWT middleware for authentication
+				// users.GET("/profile", userHandler.GetProfileHandler) // GET /api/v1/users/profile
+				// users.PUT("/profile", userHandler.UpdateProfileHandler) // PUT /api/v1/users/profile
+			}
+		}
+	}
 
 	return router
-}
-
-// 添加公开路由
-func AddPublicRoutes(router *gin.Engine, userService *service.UserService, jwtService *service.JWTService) {
-	// 用户路由
-	userHandler := NewUserHandler(userService)
-	router.POST("/users/register", userHandler.RegisterHandler)
-	router.POST("/users/login", userHandler.LoginHandler)
-
-	// 认证路由
-	authHandler := NewJWTHandler(jwtService)
-	router.POST("/auth/refresh", authHandler.RefreshToken)
-	router.POST("/auth/verify", authHandler.VerifyToken)
 }

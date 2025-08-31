@@ -4,53 +4,45 @@ import (
 	"errors"
 	"time"
 
-	"github.com/Hermitf/the-pass/global"
 	"github.com/Hermitf/the-pass/internal/model"
 	"github.com/Hermitf/the-pass/internal/utils/userutils"
 )
 
-// JWT服务
+// JWT Service
 type JWTService struct{}
 
-// 创建JWT服务
+// create a new JWTService instance
 func NewJWTService() *JWTService {
 	return &JWTService{}
 }
 
+// Generate a JWT token for a user
 func (s *JWTService) GenerateUserToken(user *model.User) (string, error) {
-	// 获取JWT配置
-	jwtConfig := global.App.Configs.JWT
-
-	config := &userutils.JWTConfig{
-		SecretKey: jwtConfig.SecretKey,
-		ExpiresIn: jwtConfig.ExpiresIn,
-	}
+	config := userutils.GetJWTConfiguration()
 
 	return userutils.GenerateJWTTokenWithConfig(user.ID, config)
 
 }
 
-// 验证Token并获取用户ID
+// Verify a JWT token and return user ID
 func (s *JWTService) VerifyToken(tokenString string) (int64, error) {
-	// 从全局配置获取JWT配置
-	jwtConfig := global.App.Configs.JWT
-
-	config := &userutils.JWTConfig{
-		SecretKey: jwtConfig.SecretKey,
-		ExpiresIn: jwtConfig.ExpiresIn,
+	config := userutils.GetJWTConfiguration()
+	userID, err := userutils.VerifyJWTTokenWithConfig(tokenString, config)
+	if err != nil {
+		return 0, err
 	}
-
-	return userutils.VerifyJWTTokenWithConfig(tokenString, config)
+	return userID, nil
 }
 
-// 刷新Token
+// Refresh Token
 func (s *JWTService) RefreshToken(tokenString string) (string, error) {
-	userID, err := s.VerifyToken(tokenString)
+	config := userutils.GetJWTConfiguration()
+	userID, err := userutils.VerifyJWTTokenWithConfig(tokenString, config)
 	if err != nil {
 		return "", err
 	}
 
-	// 检查Token是否即将过期（比如剩余时间少于1小时）
+	// check if the token is about to expire
 	claims, err := userutils.GetJWTClaims(tokenString)
 	if err != nil {
 		return "", err
@@ -59,21 +51,12 @@ func (s *JWTService) RefreshToken(tokenString string) (string, error) {
 	if exp, ok := claims["exp"].(float64); ok {
 		remainingTime := int64(exp) - time.Now().Unix()
 		if remainingTime > 3600 { // 1小时
-			return "", errors.New("Token还未到刷新时间")
+			return "", errors.New("token has not expired yet")
 		}
 	}
 
 	// 生成新Token
-	jwtConfig := global.App.Configs.JWT
-	config := &userutils.JWTConfig{
-		SecretKey: jwtConfig.SecretKey,
-		ExpiresIn: jwtConfig.ExpiresIn,
-	}
+	config = userutils.GetJWTConfiguration()
 
 	return userutils.GenerateJWTTokenWithConfig(userID, config)
-}
-
-// 检查Token是否过期
-func (s *JWTService) IsTokenExpired(tokenString string) bool {
-	return userutils.IsJWTTokenExpired(tokenString)
 }
