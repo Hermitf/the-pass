@@ -1,0 +1,15 @@
+{
+  "name": "the-pass",
+  "version": "1.0.0",
+  "description": "Food delivery platform backend management system",
+  "scripts": {
+    "prepare": "husky"
+  },
+  "devDependencies": {
+    "husky": "^9.1.7"
+  },
+  "workspaces": [
+    "frontend",
+    "backend"
+  ]
+}
