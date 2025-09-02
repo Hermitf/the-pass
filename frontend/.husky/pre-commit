@@ -1,0 +1,4 @@
+#!/usr/bin/env sh
+pre-commit run
+cd frontend
+pnpm lint-staged

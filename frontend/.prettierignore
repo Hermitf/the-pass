@@ -1,0 +1,10 @@
+# 编译后的产物
+build
+dist
+coverage
+
+# 依赖包
+node_modules
+
+# 锁文件
+pnpm-lock.yaml
