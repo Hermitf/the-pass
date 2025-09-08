@@ -1,3 +1,33 @@
+/* 登录身份切换样式 */
+.login-role-switch {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 18px;
+  gap: 10px;
+}
+
+.login-role-label {
+  font-size: 15px;
+  color: #444;
+  font-weight: 500;
+  margin-right: 6px;
+  white-space: nowrap;
+}
+
+.login-role-radio-group .ant-radio-button-wrapper-checked {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: #fff;
+  border-color: #667eea;
+  font-weight: 600;
+  box-shadow: 0 2px 8px rgba(102, 126, 234, 0.15);
+}
+
+.login-role-radio-group .ant-radio-button-wrapper:not(.ant-radio-button-wrapper-checked):hover {
+  background: #f5f7fa;
+  color: #667eea;
+  border-color: #667eea;
+}
 /* 全局重置，消除所有白边 */
 * {
   margin: 0;
@@ -5,7 +35,8 @@
   box-sizing: border-box;
 }
 
-html, body {
+html,
+body {
   margin: 0;
   padding: 0;
   overflow-x: hidden;
