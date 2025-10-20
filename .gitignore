@@ -1,8 +1,8 @@
 # 编译产物
 /cmd/server/main
 /cmd/server/server
+/backend/server
 /the-pass
-/server
 /build/
 /dist/
 /dist-ssr/
@@ -86,3 +86,15 @@ dist-ssr
 # 资源文件
 assets/
 public/
+
+# Redis data files
+dump.rdb
+appendonly.aof
+*.rdb
+*.aof
+sentinel.conf
+valkey.conf
+valkey-*.conf
+
+# 暂时忽略前端部分
+/frontend/

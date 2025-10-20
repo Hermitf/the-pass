@@ -1,22 +1,65 @@
 package global
 
 import (
+	"context"
 	"fmt"
 	"log"
+	"time"
 
 	"github.com/fsnotify/fsnotify"
+	"github.com/redis/go-redis/v9"
 	"github.com/spf13/viper"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 
-	"github.com/Hermitf/the-pass/configs"
 	"github.com/Hermitf/the-pass/internal/model"
 )
 
+// configs 类型定义 - 这应该从实际的配置文件中导入
+type configs struct {
+	Database DatabaseConfig `json:"database" yaml:"database"`
+	Redis    RedisConfig    `json:"redis" yaml:"redis"`
+	Server   ServerConfig   `json:"server" yaml:"server"`
+	JWT      JWTConfig      `json:"jwt" yaml:"jwt"`
+}
+
+type DatabaseConfig struct {
+	Username string `json:"username" yaml:"username"`
+	Password string `json:"password" yaml:"password"`
+	Host     string `json:"host" yaml:"host"`
+	Port     int    `json:"port" yaml:"port"`
+	DbName   string `json:"dbname" yaml:"dbname"`
+}
+
+type RedisConfig struct {
+	Host         string `json:"host" yaml:"host"`
+	Port         int    `json:"port" yaml:"port"`
+	Password     string `json:"password" yaml:"password"`
+	Database     int    `json:"database" yaml:"database"`
+	PoolSize     int    `json:"pool_size" yaml:"pool_size"`
+	MinIdleConns int    `json:"min_idle_conns" yaml:"min_idle_conns"`
+}
+
+type ServerConfig struct {
+	Port int        `json:"port" yaml:"port"`
+	CORS CORSConfig `json:"cors" yaml:"cors"`
+}
+
+type CORSConfig struct {
+	AllowedOrigins []string `json:"allowed_origins" yaml:"allowed_origins"`
+	AllowedMethods []string `json:"allowed_methods" yaml:"allowed_methods"`
+}
+
+type JWTConfig struct {
+	SecretKey string `json:"secret_key" yaml:"secret_key"`
+	ExpiresIn int64  `json:"expires_in" yaml:"expires_in"`
+}
+
 type Application struct {
 	ConfigViper *viper.Viper
-	Configs     configs.Configuration
+	Configs     configs
 	DB          *gorm.DB
+	RedisClient *redis.Client
 }
 
 // 初始化配置
@@ -26,14 +69,14 @@ func (a *Application) InitConfig() error {
 
 	// 解析配置文件到结构体
 	if err := a.ConfigViper.Unmarshal(&a.Configs); err != nil {
-		log.Printf("Failed to parse config: %v", err)
+		log.Printf("配置文件解析失败: %v", err)
 		return err
 	}
 
 	// 监听配置文件变化
 	a.watchConfig()
 
-	log.Println("Config initialized successfully:", a.Configs)
+	log.Println("配置初始化成功:", a.Configs)
 	return nil
 }
 
@@ -42,7 +85,7 @@ func (a *Application) InitDatabase() error {
 	// Check required database config fields
 	dbConfig := a.Configs.Database
 	if dbConfig.Username == "" || dbConfig.Password == "" || dbConfig.Host == "" || dbConfig.Port == 0 || dbConfig.DbName == "" {
-		log.Fatal("Database configuration is not set properly")
+		log.Fatal("数据库配置设置不正确")
 		return nil
 	}
 
@@ -51,18 +94,48 @@ func (a *Application) InitDatabase() error {
 	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
 
 	if err != nil {
-		log.Printf("Failed to connect to database: %v", err)
+		log.Printf("数据库连接失败: %v", err)
 		return nil
 	}
 	a.DB = db
-	log.Println("Database connected successfully")
+	log.Println("数据库连接成功")
 
 	// create tables and initialize data
-	if err := a.DB.AutoMigrate(&model.User{}); err != nil {
-		log.Printf("Failed to auto migrate database: %v", err)
-		return nil
+	if err := a.DB.AutoMigrate(
+		&model.User{},
+		&model.Employee{},
+		&model.Merchant{},
+		&model.Rider{},
+	); err != nil {
+		log.Printf("数据库自动迁移失败: %v", err)
+		return err
 	}
-	log.Println("Database auto migration completed successfully")
+	log.Println("数据库自动迁移完成")
+	return nil
+}
+
+// 初始化Redis
+func (a *Application) InitRedis() error {
+	redisConfig := a.Configs.Redis
+
+	// 直接创建Redis客户端
+	a.RedisClient = redis.NewClient(&redis.Options{
+		Addr:         fmt.Sprintf("%s:%d", redisConfig.Host, redisConfig.Port),
+		Password:     redisConfig.Password,
+		DB:           redisConfig.Database,
+		PoolSize:     redisConfig.PoolSize,
+		MinIdleConns: redisConfig.MinIdleConns,
+	})
+
+	// 测试连接
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if err := a.RedisClient.Ping(ctx).Err(); err != nil {
+		return fmt.Errorf("Redis连接失败: %v", err)
+	}
+
+	log.Println("✅ Redis连接成功")
 	return nil
 }
 
@@ -71,7 +144,7 @@ func (a *Application) initViper() error {
 	v := viper.New()
 
 	// 设置配置文件路径和名称
-	v.SetConfigFile("./configs/config.yaml")
+	v.SetConfigFile("./config.yaml")
 	// v.SetConfigName("config")
 
 	// 设置环境变量前缀
@@ -80,11 +153,11 @@ func (a *Application) initViper() error {
 
 	// 读取配置文件
 	if err := v.ReadInConfig(); err != nil {
-		log.Fatal("Failed to read config: ", err)
+		log.Fatal("配置文件读取失败: ", err)
 		return err
 	}
 	a.ConfigViper = v
-	log.Println("Config file read successfully:", v.ConfigFileUsed())
+	log.Println("配置文件读取成功:", v.ConfigFileUsed())
 	return nil
 }
 
@@ -92,16 +165,16 @@ func (a *Application) initViper() error {
 func (a *Application) watchConfig() {
 	a.ConfigViper.WatchConfig()
 	a.ConfigViper.OnConfigChange(func(e fsnotify.Event) {
-		log.Println("Config file changed:", e.Name)
+		log.Println("配置文件发生变化:", e.Name)
 
 		// Reload configuration
 		if err := a.ConfigViper.Unmarshal(&a.Configs); err != nil {
-			log.Println("Failed to reload config:", err)
+			log.Println("配置文件重新加载失败:", err)
 		} else {
-			log.Println("Config file reloaded successfully")
+			log.Println("配置文件重新加载成功")
 		}
 	})
-	log.Println("Config file watcher started")
+	log.Println("配置文件监控启动")
 }
 
 var App = new(Application)

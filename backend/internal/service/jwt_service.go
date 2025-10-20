@@ -1,62 +1,61 @@
 package service
 
 import (
-	"errors"
-	"time"
-
-	"github.com/Hermitf/the-pass/internal/model"
-	"github.com/Hermitf/the-pass/internal/utils/userutils"
+	"github.com/Hermitf/the-pass/pkg/auth"
 )
 
-// JWT Service
-type JWTService struct{}
+// #region 服务定义
 
-// create a new JWTService instance
-func NewJWTService() *JWTService {
-	return &JWTService{}
+// JWTServiceInterface JWT服务接口
+type JWTServiceInterface interface {
+	GenerateToken(userID int64, userType string) (string, error)
+	VerifyToken(tokenString string) (int64, error)
+	RefreshToken(tokenString string) (string, error)
 }
 
-// Generate a JWT token for a user
-func (s *JWTService) GenerateUserToken(user *model.User) (string, error) {
-	config := userutils.GetJWTConfiguration()
-
-	return userutils.GenerateJWTTokenWithConfig(user.ID, config)
-
+// JWTService JWT服务实现
+type JWTService struct {
+	config auth.JWTConfig
 }
 
-// Verify a JWT token and return user ID
+// #endregion
+
+// #region 构造函数
+
+// NewJWTService 创建JWT服务实例
+func NewJWTService(config auth.JWTConfig) JWTServiceInterface {
+	return &JWTService{
+		config: config,
+	}
+}
+
+// #endregion
+
+// #region JWT操作
+
+// GenerateToken 为任意用户类型生成JWT令牌
+func (s *JWTService) GenerateToken(userID int64, userType string) (string, error) {
+	return auth.GenerateToken(userID, userType, s.config)
+}
+
+// VerifyToken 验证JWT令牌并返回用户ID
 func (s *JWTService) VerifyToken(tokenString string) (int64, error) {
-	config := userutils.GetJWTConfiguration()
-	userID, err := userutils.VerifyJWTTokenWithConfig(tokenString, config)
+	claims, err := auth.VerifyToken(tokenString, s.config)
 	if err != nil {
 		return 0, err
 	}
-	return userID, nil
+	return claims.UserID, nil
 }
 
-// Refresh Token
+// RefreshToken 刷新JWT令牌
 func (s *JWTService) RefreshToken(tokenString string) (string, error) {
-	config := userutils.GetJWTConfiguration()
-	userID, err := userutils.VerifyJWTTokenWithConfig(tokenString, config)
+	claims, err := auth.VerifyToken(tokenString, s.config)
 	if err != nil {
 		return "", err
 	}
 
-	// check if the token is about to expire
-	claims, err := userutils.GetJWTClaims(tokenString)
-	if err != nil {
-		return "", err
-	}
-
-	if exp, ok := claims["exp"].(float64); ok {
-		remainingTime := int64(exp) - time.Now().Unix()
-		if remainingTime > 3600 { // 1小时
-			return "", errors.New("token has not expired yet")
-		}
-	}
-
-	// 生成新Token
-	config = userutils.GetJWTConfiguration()
-
-	return userutils.GenerateJWTTokenWithConfig(userID, config)
+	// 生成新令牌
+	return auth.GenerateToken(claims.UserID, claims.UserType, s.config)
 }
+
+// #endregion

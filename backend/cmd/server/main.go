@@ -4,9 +4,11 @@ package main
 import (
 	"fmt"
 	"log"
+	"os"
+	"os/signal"
+	"syscall"
 
-	_ "github.com/Hermitf/the-pass/docs"
-	"github.com/Hermitf/the-pass/global"
+	"github.com/Hermitf/the-pass/internal/app"
 	"github.com/Hermitf/the-pass/internal/handler"
 )
 
@@ -32,27 +34,50 @@ import (
 // @description 使用Bearer Token进行认证，格式: Bearer {token}
 
 func main() {
-	// 初始化配置
-	if err := global.App.InitConfig(); err != nil {
-		log.Fatal("配置初始化失败:", err)
-	}
-	// 初始化数据库
-	if err := global.App.InitDatabase(); err != nil {
-		log.Fatal("数据库初始化失败:", err)
-	}
-	db := global.App.DB
-	if db == nil {
-		log.Fatal("数据库未初始化")
+	// 创建应用上下文（核心依赖管理）
+	appCtx := app.NewAppContext()
+
+	// 初始化应用上下文
+	if err := appCtx.Initialize("./config.yaml"); err != nil {
+		log.Fatal("应用上下文初始化失败:", err)
 	}
 
-	// 创建路由
-	r := handler.SetupRouter(db)
+	// 设置优雅关闭
+	defer func() {
+		if err := appCtx.Close(); err != nil {
+			log.Printf("关闭应用上下文时出错: %v", err)
+		}
+	}()
+
+	// 创建路由（传入应用上下文）
+	router := handler.NewRouter(appCtx)
 
 	// 启动服务
-	port := global.App.Configs.Server.Port
-	log.Printf("服务正在监听端口: %d", port)
-	log.Printf("Swagger文档地址: http://localhost:%d/swagger/index.html", port)
-	if err := r.Run(fmt.Sprintf(":%d", port)); err != nil {
-		log.Fatal("服务启动失败:", err)
+	port := appCtx.Config.Server.Port
+	log.Printf("🚀 服务正在监听端口: %d", port)
+	log.Printf("📚 Swagger文档地址: http://localhost:%d/swagger/index.html", port)
+
+	// 创建错误通道
+	errCh := make(chan error, 1)
+
+	// 启动HTTP服务器
+	go func() {
+		if err := router.Run(fmt.Sprintf(":%d", port)); err != nil {
+			errCh <- fmt.Errorf("服务启动失败: %w", err)
+		}
+	}()
+
+	// 监听系统信号
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+
+	// 等待错误或信号
+	select {
+	case err := <-errCh:
+		log.Fatal(err)
+	case sig := <-sigCh:
+		log.Printf("📍 接收到信号: %v, 正在优雅关闭...", sig)
 	}
+
+	log.Println("✅ 服务已关闭")
 }
