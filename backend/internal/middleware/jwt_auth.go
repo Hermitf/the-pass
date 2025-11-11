@@ -72,6 +72,7 @@ func (m *JWTMiddleware) verifyTokenAndExtractUserID(c *gin.Context, token string
 // #region 中间件主函数
 
 // AuthMiddleware JWT认证中间件主函数
+// TODO: 支持角色/权限校验与多租户场景下的额外令牌校验。
 func (m *JWTMiddleware) AuthMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		// 步骤1：提取Authorization头部

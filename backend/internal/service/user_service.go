@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"time"
@@ -17,12 +18,13 @@ import (
 // UserServiceInterface 用户服务接口
 type UserServiceInterface interface {
 	// 用户注册和认证
-	RegisterUser(user *model.User) error
+	RegisterUser(ctx context.Context, user *model.User, smsCode string) error
 	LoginUser(loginInfo, password, loginType string) (string, error)
 
 	// 短信验证相关
-	SendSMSCode(phone string) error
-	VerifySMSCode(phone, code string) error
+	SendSMSCode(ctx context.Context, phone string) error
+	VerifySMSCode(ctx context.Context, phone, code string) error
+	CanSendSMSCode(ctx context.Context, phone string) (bool, time.Duration, error)
 
 	// 用户信息管理
 	GetUserProfile(userID uint) (*model.User, error)
@@ -47,6 +49,7 @@ type UserServiceInterface interface {
 type UserService struct {
 	userRepo   repository.UserRepositoryInterface
 	jwtService JWTServiceInterface
+	smsService *sms.Service
 }
 
 // #endregion
@@ -57,6 +60,7 @@ type UserService struct {
 type UserServiceDependencies struct {
 	UserRepo   repository.UserRepositoryInterface
 	JWTService JWTServiceInterface
+	SMSService *sms.Service
 }
 
 // NewUserService 创建用户服务实例
@@ -64,6 +68,7 @@ func NewUserService(deps UserServiceDependencies) UserServiceInterface {
 	return &UserService{
 		userRepo:   deps.UserRepo,
 		jwtService: deps.JWTService,
+		smsService: deps.SMSService,
 	}
 }
 
@@ -72,7 +77,12 @@ func NewUserService(deps UserServiceDependencies) UserServiceInterface {
 // #region 用户注册和认证
 
 // RegisterUser 注册用户
-func (s *UserService) RegisterUser(user *model.User) error {
+// 实现：整合短信验证码校验与事务控制，确保校验与写入的原子性。
+// 流程：
+// 1) 入参校验与字段验证
+// 2) 短信验证码校验（存在手机号时要求验证码）
+// 3) 事务内二次可用性检查 + 写入用户
+func (s *UserService) RegisterUser(ctx context.Context, user *model.User, smsCode string) error {
 	if user == nil {
 		return ErrUserNil
 	}
@@ -87,6 +97,20 @@ func (s *UserService) RegisterUser(user *model.User) error {
 		return fmt.Errorf("%w: %v", ErrAvailabilityCheck, err)
 	}
 
+	// 短信验证码校验（当提供手机号时）
+	if user.Phone != "" {
+		if s.smsService == nil {
+			return ErrSMSSendFailed
+		}
+		if smsCode == "" {
+			return ErrSMSCodeEmpty
+		}
+		if err := s.smsService.VerifyCode(ctx, user.Phone, smsCode); err != nil {
+			// 统一收敛为业务层的验证码错误
+			return ErrSMSCodeInvalid
+		}
+	}
+
 	// 加密密码
 	if user.PasswordHash != "" {
 		hashedPassword, err := crypto.HashPassword(user.PasswordHash)
@@ -96,9 +120,18 @@ func (s *UserService) RegisterUser(user *model.User) error {
 		user.PasswordHash = hashedPassword
 	}
 
-	// 创建用户
-	if err := s.userRepo.CreateUser(user); err != nil {
-		return fmt.Errorf("%w: %v", ErrUserCreationFailed, err)
+	// 在事务中执行：二次可用性检查 + 创建
+	if err := s.userRepo.WithTx(ctx, func(txRepo repository.UserRepositoryInterface) error {
+		// 二次可用性检查（防止并发注册）
+		if err := s.CheckUserAvailability(user.Username, user.Email, user.Phone); err != nil {
+			return fmt.Errorf("%w: %v", ErrAvailabilityCheck, err)
+		}
+		if err := txRepo.CreateUser(user); err != nil {
+			return fmt.Errorf("%w: %v", ErrUserCreationFailed, err)
+		}
+		return nil
+	}); err != nil {
+		return err
 	}
 
 	s.logUserRegistered(user)
@@ -106,6 +139,7 @@ func (s *UserService) RegisterUser(user *model.User) error {
 }
 
 // LoginUser 用户登录
+// TODO: 支持更多登录类型（如第三方登录）并细化异常类型。
 func (s *UserService) LoginUser(loginInfo, password, loginType string) (string, error) {
 	if loginInfo == "" || password == "" {
 		return "", ErrLoginInfoEmpty
@@ -124,7 +158,13 @@ func (s *UserService) LoginUser(loginInfo, password, loginType string) (string, 
 
 	// 验证登录凭据
 	if err := s.verifyLoginCredentials(user, loginInfo, password, loginType); err != nil {
-		return "", ErrInvalidCredentials
+		// 将细化错误统一映射为未授权，便于上层处理
+		switch err {
+		case ErrInvalidPassword, ErrSMSCodeInvalid, ErrAccountDeactivated, ErrUnsupportedLoginType:
+			return "", err
+		default:
+			return "", ErrInvalidCredentials
+		}
 	}
 
 	// 生成 JWT Token
@@ -142,53 +182,50 @@ func (s *UserService) LoginUser(loginInfo, password, loginType string) (string, 
 // #region 短信验证相关
 
 // SendSMSCode 发送短信验证码
-func (s *UserService) SendSMSCode(phone string) error {
+func (s *UserService) SendSMSCode(ctx context.Context, phone string) error {
 	if phone == "" {
 		return ErrPhoneEmpty
 	}
-
-	// 验证手机号格式
 	if !validator.IsPhone(phone) {
 		return ErrPhoneInvalid
 	}
-
-	// 检查用户是否存在
 	user, err := s.userRepo.GetUserByPhone(phone)
 	if err != nil {
 		return ErrPhoneNotRegistered
 	}
-
-	// 检查发送频率限制
-	if err := s.checkSMSRateLimit(phone); err != nil {
-		return err
-	}
-
-	// 生成并发送短信验证码
-	code := sms.GenerateCode()
-	if err := sms.Send(phone, code); err != nil {
+	if s.smsService == nil {
 		return ErrSMSSendFailed
 	}
-
-	// 记录发送日志
+	if err := s.smsService.SendCode(ctx, phone); err != nil {
+		return err
+	}
 	s.logSMSSent(phone, user.ID)
 	return nil
 }
 
 // VerifySMSCode 验证短信验证码
-func (s *UserService) VerifySMSCode(phone, code string) error {
+func (s *UserService) VerifySMSCode(ctx context.Context, phone, code string) error {
 	if phone == "" || code == "" {
 		return ErrSMSCodeEmpty
 	}
-
-	// 从缓存或数据库获取实际的验证码进行比较
-	actualCode, err := s.getStoredSMSCode(phone)
-	if err != nil {
-		return err
-	}
-	if err := sms.Verify(code, actualCode); err != nil {
+	if s.smsService == nil {
 		return ErrSMSCodeInvalid
 	}
+	if err := s.smsService.VerifyCode(ctx, phone, code); err != nil {
+		return err
+	}
 	return nil
+}
+
+// CanSendSMSCode 只读检测是否允许发送验证码（不写入窗口）
+func (s *UserService) CanSendSMSCode(ctx context.Context, phone string) (bool, time.Duration, error) {
+	if phone == "" || !validator.IsPhone(phone) {
+		return false, 0, ErrPhoneInvalid
+	}
+	if s.smsService == nil {
+		return false, 0, ErrSMSSendFailed
+	}
+	return s.smsService.CanSend(ctx, phone)
 }
 
 // #endregion
@@ -488,14 +525,6 @@ func (s *UserService) GetUserStats() (map[string]interface{}, error) {
 
 // #region 私有辅助方法
 
-// getStoredSMSCode 从缓存或数据库获取手机号对应的验证码
-func (s *UserService) getStoredSMSCode(phone string) (string, error) {
-	// TODO: 实现从缓存或数据库获取验证码的逻辑
-	// 例如：return cache.GetSMSCode(phone)
-	// 这里暂时返回错误，实际部署时需实现
-	return "", fmt.Errorf("getStoredSMSCode not implemented")
-}
-
 // getUserByLoginInfo 根据登录信息获取用户
 func (s *UserService) getUserByLoginInfo(loginInfo string) (*model.User, error) {
 	if validator.IsEmail(loginInfo) {
@@ -512,22 +541,23 @@ func (s *UserService) verifyLoginCredentials(user *model.User, loginInfo, passwo
 	switch loginType {
 	case "password":
 		if err := crypto.VerifyPassword(user.PasswordHash, password); err != nil {
-			return fmt.Errorf("invalid password")
+			return ErrInvalidPassword
 		}
 	case "sms":
 		if !validator.IsPhone(loginInfo) {
-			return fmt.Errorf("SMS login only supported for phone numbers")
+			return ErrPhoneInvalid
 		}
-		// 从缓存或数据库获取实际验证码进行比较
-		storedCode, err := s.getStoredSMSCode(loginInfo)
-		if err != nil {
-			return fmt.Errorf("failed to retrieve SMS code: %w", err)
+		if s.smsService == nil {
+			return ErrSMSCodeInvalid
 		}
-		if err := sms.Verify(password, storedCode); err != nil {
-			return fmt.Errorf("invalid SMS code")
+		if err := s.smsService.VerifyCode(context.Background(), loginInfo, password); err != nil {
+			return ErrSMSCodeInvalid
 		}
+	case "oauth":
+		// 预留第三方登录类型，暂未实现
+		return ErrUnsupportedLoginType
 	default:
-		return fmt.Errorf("unsupported login type: %s", loginType)
+		return ErrUnsupportedLoginType
 	}
 
 	return nil
@@ -606,13 +636,6 @@ func (s *UserService) checkUserAvailabilityExcluding(excludeUserID uint, usernam
 		}
 	}
 
-	return nil
-}
-
-// checkSMSRateLimit 检查短信发送频率限制
-func (s *UserService) checkSMSRateLimit(phone string) error {
-	// 实现具体的频率限制逻辑
-	// 这里可以检查数据库或缓存中是否有最近发送记录
 	return nil
 }
 

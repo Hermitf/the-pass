@@ -16,7 +16,7 @@ coverage*.html
 *.prof
 
 # 配置文件（如果包含敏感信息）
-configs/config.yaml
+**/config.yaml
 .env
 .env.local
 *.local

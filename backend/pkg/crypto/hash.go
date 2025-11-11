@@ -2,28 +2,23 @@ package crypto
 
 import (
 	"fmt"
-	"golang.org/x/crypto/bcrypt"
 	"unicode"
-)
 
-const (
-	// DefaultCost bcrypt 默认代价
-	DefaultCost = bcrypt.DefaultCost
-	// MinCost bcrypt 最小代价
-	MinCost = bcrypt.MinCost
-	// MaxCost bcrypt 最大代价
-	MaxCost = bcrypt.MaxCost
-	// BcryptPasswordMaxLength bcrypt 密码最大长度限制
-	BcryptPasswordMaxLength = 72
+	"golang.org/x/crypto/bcrypt"
 )
 
 // HashPassword 使用 bcrypt 加密密码
+// 支持动态调整 cost（通过 SetBcryptCost/LoadPasswordConfigFromEnv），并支持 pepper（可通过 SetPepper 配置）。
 func HashPassword(password string) (string, error) {
 	if password == "" {
 		return "", fmt.Errorf("密码不能为空")
 	}
 
-	hashedBytes, err := bcrypt.GenerateFromPassword([]byte(password), DefaultCost)
+	// 读取当前生效的 cost 与 pepper
+	cost := GetBcryptCost()
+	pw := applyPepper(password)
+
+	hashedBytes, err := bcrypt.GenerateFromPassword([]byte(pw), cost)
 	if err != nil {
 		return "", fmt.Errorf("密码加密失败: %w", err)
 	}
@@ -31,24 +26,11 @@ func HashPassword(password string) (string, error) {
 	return string(hashedBytes), nil
 }
 
-// VerifyPassword 验证密码是否正确
-func VerifyPassword(hashedPassword, password string) error {
-	if hashedPassword == "" {
-		return fmt.Errorf("哈希密码不能为空")
-	}
-	if password == "" {
-		return fmt.Errorf("密码不能为空")
-	}
-
-	err := bcrypt.CompareHashAndPassword([]byte(hashedPassword), []byte(password))
-	if err != nil {
-		return fmt.Errorf("密码验证失败")
-	}
-
-	return nil
-}
-
 // ValidatePassword 验证密码强度
+// 规则：
+// - 长度：6 ~ 72（bcrypt 上限，避免被截断）
+// - 复杂度：至少包含大小写字母与数字
+// 使用时机：注册/修改密码前置校验，尽量在进入 Hash 前就拦截弱密码。
 func ValidatePassword(password string) error {
 	if password == "" {
 		return fmt.Errorf("密码不能为空")

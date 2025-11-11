@@ -2,9 +2,8 @@ package auth
 
 import (
 	"fmt"
-	"time"
-
 	"github.com/golang-jwt/jwt/v5"
+	"time"
 )
 
 // JWTConfig JWT配置结构
@@ -21,6 +20,7 @@ type Claims struct {
 }
 
 // GenerateToken 生成JWT令牌
+// TODO: 支持多种签名算法、可扩展的自定义声明以及多租户隔离。
 func GenerateToken(userID int64, userType string, jwtConfig JWTConfig) (string, error) {
 	if userID <= 0 {
 		return "", fmt.Errorf("用户ID无效")
@@ -48,7 +48,7 @@ func GenerateToken(userID int64, userType string, jwtConfig JWTConfig) (string, 
 	return token.SignedString([]byte(jwtConfig.SecretKey))
 }
 
-// VerifyToken 验证JWT令牌
+// VerifyToken 验证JWT令牌（预留 ctx 以扩展黑名单/审计）
 func VerifyToken(tokenString string, jwtConfig JWTConfig) (*Claims, error) {
 	if tokenString == "" {
 		return nil, fmt.Errorf("令牌不能为空")

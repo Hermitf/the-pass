@@ -1,6 +1,7 @@
 package repository
 
 import (
+	"context"
 	"gorm.io/gorm"
 
 	"github.com/Hermitf/the-pass/internal/model"
@@ -29,6 +30,15 @@ type UserRepositoryInterface interface {
 	ExistsWithPhone(phone string) (bool, error)
 	CountUsers() (int64, error)
 	CountUsersByStatus(status string) (int64, error)
+
+	// WithTx 在事务中执行一组仓储操作，确保原子性
+	// 典型用法：
+	//  return repo.WithTx(ctx, func(txRepo UserRepositoryInterface) error {
+	//      // 在同一事务中执行多步校验与写入
+	//      if err := txRepo.CreateUser(user); err != nil { return err }
+	//      return nil
+	//  })
+	WithTx(ctx context.Context, fn func(txRepo UserRepositoryInterface) error) error
 }
 
 // UserRepository 用户仓库实现
@@ -260,6 +270,18 @@ func (r *UserRepository) CountUsersByStatus(status string) (int64, error) {
 		return 0, err
 	}
 	return count, nil
+}
+
+// #endregion
+
+// #region 事务支持
+
+// WithTx 使用 GORM 事务封装一组仓储操作
+func (r *UserRepository) WithTx(ctx context.Context, fn func(txRepo UserRepositoryInterface) error) error {
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		txRepo := &UserRepository{db: tx}
+		return fn(txRepo)
+	})
 }
 
 // #endregion

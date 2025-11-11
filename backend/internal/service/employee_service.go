@@ -12,6 +12,7 @@ import (
 )
 
 // #region 服务定义
+const logTimeLayout = "2006-01-02 15:04:05"
 
 // EmployeeServiceInterface 员工服务接口
 type EmployeeServiceInterface interface {
@@ -141,16 +142,7 @@ func (s *EmployeeService) LoginEmployee(loginInfo, password, loginType string) (
 
 // GetEmployeeByID 根据ID获取员工信息
 func (s *EmployeeService) GetEmployeeByID(id int64) (*model.Employee, error) {
-	if id <= 0 {
-		return nil, ErrInvalidEmployeeID
-	}
-
-	employee, err := s.employeeRepo.GetByID(id)
-	if err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrEmployeeNotFound, err)
-	}
-
-	return employee, nil
+	return s.fetchEmployeeByID(id)
 }
 
 // UpdateEmployeeProfile 更新员工档案
@@ -160,7 +152,7 @@ func (s *EmployeeService) UpdateEmployeeProfile(employeeID int64, name, email, p
 	}
 
 	// 获取员工信息
-	employee, err := s.employeeRepo.GetByID(employeeID)
+	employee, err := s.fetchEmployeeByID(employeeID)
 	if err != nil {
 		return fmt.Errorf("%w: %v", ErrEmployeeNotFound, err)
 	}
@@ -198,9 +190,9 @@ func (s *EmployeeService) UpdateEmployeePassword(employeeID int64, oldPassword, 
 	}
 
 	// 获取员工信息
-	employee, err := s.employeeRepo.GetByID(employeeID)
+	employee, err := s.fetchEmployeeByID(employeeID)
 	if err != nil {
-		return fmt.Errorf("%w: %v", ErrEmployeeNotFound, err)
+		return err
 	}
 
 	// 验证旧密码
@@ -263,9 +255,9 @@ func (s *EmployeeService) TransferEmployee(employeeID, newMerchantID int64) erro
 	}
 
 	// 获取员工信息
-	employee, err := s.employeeRepo.GetByID(employeeID)
+	employee, err := s.fetchEmployeeByID(employeeID)
 	if err != nil {
-		return fmt.Errorf("%w: %v", ErrEmployeeNotFound, err)
+		return err
 	}
 
 	// 检查是否转移到相同商家
@@ -368,6 +360,22 @@ func (s *EmployeeService) GetEmployeeStatsByMerchant(merchantID int64) (map[stri
 // #endregion
 
 // #region 私有辅助方法
+func (s *EmployeeService) fetchEmployeeByID(id int64) (*model.Employee, error) {
+	if id <= 0 {
+		return nil, ErrInvalidEmployeeID
+	}
+
+	employee, err := s.employeeRepo.GetByID(id)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrEmployeeNotFound, err)
+	}
+
+	return employee, nil
+}
+
+func (s *EmployeeService) now() string {
+	return time.Now().Format(logTimeLayout)
+}
 
 // getEmployeeByLoginInfo 根据登录信息获取员工
 func (s *EmployeeService) getEmployeeByLoginInfo(loginInfo, loginType string) (*model.Employee, error) {
@@ -437,31 +445,31 @@ func (s *EmployeeService) checkEmployeeAvailabilityExcluding(excludeEmployeeID i
 // logEmployeeRegistered 记录员工注册日志
 func (s *EmployeeService) logEmployeeRegistered(employee *model.Employee) {
 	log.Printf("员工注册成功 - 用户名: %s, 邮箱: %s, 商家ID: %d, 时间: %s",
-		employee.Username, employee.Email, employee.MerchantID, time.Now().Format("2006-01-02 15:04:05"))
+		employee.Username, employee.Email, employee.MerchantID, s.now())
 }
 
 // logEmployeeLogin 记录员工登录日志
 func (s *EmployeeService) logEmployeeLogin(employee *model.Employee, loginType string) {
 	log.Printf("员工登录成功 - 员工ID: %d, 用户名: %s, 商家ID: %d, 登录方式: %s, 时间: %s",
-		employee.ID, employee.Username, employee.MerchantID, loginType, time.Now().Format("2006-01-02 15:04:05"))
+		employee.ID, employee.Username, employee.MerchantID, loginType, s.now())
 }
 
 // logEmployeeProfileUpdated 记录员工档案更新日志
 func (s *EmployeeService) logEmployeeProfileUpdated(employeeID int64) {
 	log.Printf("员工档案更新 - 员工ID: %d, 时间: %s",
-		employeeID, time.Now().Format("2006-01-02 15:04:05"))
+		employeeID, s.now())
 }
 
 // logEmployeePasswordUpdated 记录员工密码更新日志
 func (s *EmployeeService) logEmployeePasswordUpdated(employeeID int64) {
 	log.Printf("员工密码更新 - 员工ID: %d, 时间: %s",
-		employeeID, time.Now().Format("2006-01-02 15:04:05"))
+		employeeID, s.now())
 }
 
 // logEmployeeTransferred 记录员工转移日志
 func (s *EmployeeService) logEmployeeTransferred(employeeID, oldMerchantID, newMerchantID int64) {
 	log.Printf("员工转移 - 员工ID: %d, 原商家ID: %d, 新商家ID: %d, 时间: %s",
-		employeeID, oldMerchantID, newMerchantID, time.Now().Format("2006-01-02 15:04:05"))
+		employeeID, oldMerchantID, newMerchantID, s.now())
 }
 
 // #endregion

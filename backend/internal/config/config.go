@@ -2,6 +2,7 @@ package config
 
 import (
 	"log"
+	"time"
 
 	"github.com/fsnotify/fsnotify"
 	"github.com/spf13/viper"
@@ -11,6 +12,7 @@ type Configuration struct {
 	Server   ServerConfig   `mapstructure:"server" json:"server" yaml:"server"`
 	Database DatabaseConfig `mapstructure:"database" json:"database" yaml:"database"`
 	JWT      JWTConfig      `mapstructure:"jwt" json:"jwt" yaml:"jwt"`
+	SMS      SMSConfig      `json:"sms" yaml:"sms"`
 	Redis    RedisConfig    `mapstructure:"redis" json:"redis" yaml:"redis"`
 }
 
@@ -35,6 +37,21 @@ type DatabaseConfig struct {
 type JWTConfig struct {
 	SecretKey string `mapstructure:"secret_key" json:"secret_key" yaml:"secret_key"`
 	ExpiresIn int64  `mapstructure:"expires_in" json:"expires_in" yaml:"expires_in"`
+}
+
+type SMSConfig struct {
+	Enabled      bool            `json:"enabled" yaml:"enabled"`
+	Provider     string          `json:"provider" yaml:"provider"`
+	APIKey       string          `json:"api_key" yaml:"api_key"`
+	APISecret    string          `json:"api_secret" yaml:"api_secret"`
+	TemplateCode string          `json:"template_code" yaml:"template_code"`
+	ExpireIn     time.Duration   `json:"expire_in" yaml:"expire_in"`
+	RateLimit    RateLimitConfig `json:"rate_limit" yaml:"rate_limit"`
+}
+
+type RateLimitConfig struct {
+	Interval time.Duration `json:"interval" yaml:"interval"`
+	MaxCount int           `json:"max_count" yaml:"max_count"`
 }
 
 type RedisConfig struct {

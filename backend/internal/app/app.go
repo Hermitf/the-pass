@@ -11,6 +11,7 @@ import (
 
 	"github.com/Hermitf/the-pass/internal/config"
 	"github.com/Hermitf/the-pass/internal/database"
+	"github.com/Hermitf/the-pass/pkg/sms"
 )
 
 // AppContext 应用上下文，管理核心依赖和资源
@@ -24,6 +25,7 @@ type AppContext struct {
 	Config      *config.Configuration
 	DB          *gorm.DB
 	RedisClient *redis.Client
+	SMSService  *sms.Service
 }
 
 // NewAppContext 创建应用上下文
@@ -61,6 +63,9 @@ func (ctx *AppContext) Initialize(configPath string) error {
 
 	log.Println("✅ Redis初始化成功")
 
+	// 初始化短信服务（如果启用）
+	ctx.initSMSService()
+
 	log.Println("🎉 应用上下文初始化完成")
 	return nil
 }
@@ -87,6 +92,28 @@ func (ctx *AppContext) initRedis() error {
 	}
 
 	return nil
+}
+
+// initSMSService 初始化短信业务服务
+func (ctx *AppContext) initSMSService() {
+	smsCfg := ctx.Config.SMS
+	if !smsCfg.Enabled {
+		log.Println("SMS 服务未启用，跳过初始化")
+		return
+	}
+
+	store := sms.NewRedisStore(ctx.RedisClient)
+	provider := sms.NewMockProvider()
+	runtimeCfg := sms.SMSRuntimeConfig{
+		Enabled:    smsCfg.Enabled,
+		ExpireIn:   smsCfg.ExpireIn,
+		RateMax:    smsCfg.RateLimit.MaxCount,
+		RateWindow: smsCfg.RateLimit.Interval,
+		DailyMax:   0, // 当前配置未提供每日上限，如需使用可在配置中添加
+		Template:   smsCfg.TemplateCode,
+	}
+	ctx.SMSService = sms.NewService(store, provider, runtimeCfg)
+	log.Println("✅ SMS 服务初始化成功")
 }
 
 // Close 关闭所有资源

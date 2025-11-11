@@ -8,6 +8,7 @@ import (
 	"github.com/Hermitf/the-pass/internal/repository"
 	"github.com/Hermitf/the-pass/internal/service"
 	"github.com/Hermitf/the-pass/pkg/auth"
+	"github.com/Hermitf/the-pass/pkg/sms"
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	swaggerFiles "github.com/swaggo/files"
@@ -57,9 +58,15 @@ func initializeDependencies(appCtx *app.AppContext) *RouterDependencies {
 	jwtService := service.NewJWTService(jwtConfig)
 
 	// Initialize services with proper dependencies
+	var smsService *sms.Service
+	if appCtx.SMSService != nil {
+		smsService = appCtx.SMSService
+	}
+
 	userService := service.NewUserService(service.UserServiceDependencies{
 		UserRepo:   userRepo,
 		JWTService: jwtService,
+		SMSService: smsService,
 	})
 	employeeService := service.NewEmployeeService(service.EmployeeServiceDependencies{
 		EmployeeRepo: employeeRepo,
@@ -69,10 +76,12 @@ func initializeDependencies(appCtx *app.AppContext) *RouterDependencies {
 		MerchantRepo: merchantRepo,
 		EmployeeRepo: employeeRepo,
 		JWTService:   jwtService,
+		SMSService:   smsService,
 	})
 	riderService := service.NewRiderService(service.RiderServiceDependencies{
 		RiderRepo:  riderRepo,
 		JWTService: jwtService,
+		SMSService: smsService,
 	})
 
 	// Initialize handlers
@@ -103,6 +112,9 @@ func setupPublicRoutes(v1 *gin.RouterGroup, deps *RouterDependencies) (*gin.Rout
 	{
 		userGroup.POST("/register", deps.AuthHandler.RegisterHandler("user"))
 		userGroup.POST("/login", deps.AuthHandler.LoginHandler("user"))
+		userGroup.POST("/sms/send", deps.AuthHandler.SendSMSCodeHandler)
+		userGroup.POST("/sms/verify", deps.AuthHandler.VerifySMSCodeHandler)
+		userGroup.POST("/sms/can-send", deps.AuthHandler.CanSendSMSCodeHandler)
 	}
 
 	// Employee routes
@@ -117,6 +129,9 @@ func setupPublicRoutes(v1 *gin.RouterGroup, deps *RouterDependencies) (*gin.Rout
 	{
 		riderGroup.POST("/register", deps.AuthHandler.RegisterHandler("rider"))
 		riderGroup.POST("/login", deps.AuthHandler.LoginHandler("rider"))
+		riderGroup.POST("/sms/send", deps.AuthHandler.SendRiderSMSCodeHandler)
+		riderGroup.POST("/sms/verify", deps.AuthHandler.VerifyRiderSMSCodeHandler)
+		riderGroup.POST("/sms/can-send", deps.AuthHandler.CanSendRiderSMSCodeHandler)
 	}
 
 	// Merchant routes
@@ -124,6 +139,9 @@ func setupPublicRoutes(v1 *gin.RouterGroup, deps *RouterDependencies) (*gin.Rout
 	{
 		merchantGroup.POST("/register", deps.AuthHandler.RegisterHandler("merchant"))
 		merchantGroup.POST("/login", deps.AuthHandler.LoginHandler("merchant"))
+		merchantGroup.POST("/sms/send", deps.AuthHandler.SendMerchantSMSCodeHandler)
+		merchantGroup.POST("/sms/verify", deps.AuthHandler.VerifyMerchantSMSCodeHandler)
+		merchantGroup.POST("/sms/can-send", deps.AuthHandler.CanSendMerchantSMSCodeHandler)
 	}
 
 	return userGroup, employeeGroup, riderGroup, merchantGroup

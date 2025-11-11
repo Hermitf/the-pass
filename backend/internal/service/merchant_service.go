@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"time"
@@ -8,6 +9,7 @@ import (
 	"github.com/Hermitf/the-pass/internal/model"
 	"github.com/Hermitf/the-pass/internal/repository"
 	"github.com/Hermitf/the-pass/pkg/crypto"
+	"github.com/Hermitf/the-pass/pkg/sms"
 	"github.com/Hermitf/the-pass/pkg/validator"
 )
 
@@ -18,6 +20,11 @@ type MerchantServiceInterface interface {
 	// 商家注册和认证
 	RegisterMerchant(merchant *model.Merchant) error
 	LoginMerchant(loginInfo, password, loginType string) (string, error)
+
+	// 短信验证相关
+	SendSMSCode(ctx context.Context, phone string) error
+	VerifySMSCode(ctx context.Context, phone, code string) error
+	CanSendSMSCode(ctx context.Context, phone string) (bool, time.Duration, error)
 
 	// 商家信息管理
 	GetMerchantByID(id int64) (*model.Merchant, error)
@@ -48,6 +55,7 @@ type MerchantService struct {
 	merchantRepo repository.MerchantRepositoryInterface
 	employeeRepo repository.EmployeeRepositoryInterface
 	jwtService   JWTServiceInterface
+	smsService   *sms.Service
 }
 
 // #endregion
@@ -59,6 +67,7 @@ type MerchantServiceDependencies struct {
 	MerchantRepo repository.MerchantRepositoryInterface
 	EmployeeRepo repository.EmployeeRepositoryInterface
 	JWTService   JWTServiceInterface
+	SMSService   *sms.Service
 }
 
 // NewMerchantService 创建商家服务实例
@@ -67,6 +76,7 @@ func NewMerchantService(deps MerchantServiceDependencies) MerchantServiceInterfa
 		merchantRepo: deps.MerchantRepo,
 		employeeRepo: deps.EmployeeRepo,
 		jwtService:   deps.JWTService,
+		smsService:   deps.SMSService,
 	}
 }
 
@@ -138,6 +148,68 @@ func (s *MerchantService) LoginMerchant(loginInfo, password, loginType string) (
 
 	s.logMerchantLogin(merchant, loginType)
 	return token, nil
+}
+
+// #endregion
+
+// #region 短信验证相关
+
+// SendSMSCode 发送短信验证码
+func (s *MerchantService) SendSMSCode(ctx context.Context, phone string) error {
+	if phone == "" {
+		return ErrPhoneEmpty
+	}
+	if !validator.IsPhone(phone) {
+		return ErrPhoneInvalid
+	}
+
+	// 检查商家是否存在
+	merchant, err := s.merchantRepo.GetByPhone(phone)
+	if err != nil {
+		return ErrPhoneNotRegistered
+	}
+
+	// 检查商家状态
+	if !merchant.IsActive {
+		return ErrAccountDeactivated
+	}
+
+	// 发送验证码
+	if s.smsService == nil {
+		return ErrSMSSendFailed
+	}
+	if err := s.smsService.SendCode(ctx, phone); err != nil {
+		return err
+	}
+
+	log.Printf("商家短信发送 - 手机号: %s, 商家ID: %d, 时间: %s",
+		phone, merchant.ID, time.Now().Format("2006-01-02 15:04:05"))
+	return nil
+}
+
+// VerifySMSCode 验证短信验证码
+func (s *MerchantService) VerifySMSCode(ctx context.Context, phone, code string) error {
+	if phone == "" || code == "" {
+		return ErrSMSCodeEmpty
+	}
+	if s.smsService == nil {
+		return ErrSMSCodeInvalid
+	}
+	if err := s.smsService.VerifyCode(ctx, phone, code); err != nil {
+		return err
+	}
+	return nil
+}
+
+// CanSendSMSCode 只读检测商家是否可发送验证码
+func (s *MerchantService) CanSendSMSCode(ctx context.Context, phone string) (bool, time.Duration, error) {
+	if phone == "" || !validator.IsPhone(phone) {
+		return false, 0, ErrPhoneInvalid
+	}
+	if s.smsService == nil {
+		return false, 0, ErrSMSSendFailed
+	}
+	return s.smsService.CanSend(ctx, phone)
 }
 
 // #endregion

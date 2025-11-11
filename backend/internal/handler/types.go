@@ -17,6 +17,7 @@ type RegisterRequest struct {
 	Password string `json:"password" binding:"required" example:"password123"`
 	Email    string `json:"email" binding:"required,email" example:"user@example.com"`
 	Phone    string `json:"phone" binding:"required" example:"1234567890"`
+	SMSCode  string `json:"sms_code" example:"123456"` // 短信验证码（注册校验）
 }
 
 // ProfileRequest - 更新用户档案请求结构

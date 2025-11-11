@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"time"
@@ -8,6 +9,7 @@ import (
 	"github.com/Hermitf/the-pass/internal/model"
 	"github.com/Hermitf/the-pass/internal/repository"
 	"github.com/Hermitf/the-pass/pkg/crypto"
+	"github.com/Hermitf/the-pass/pkg/sms"
 	"github.com/Hermitf/the-pass/pkg/validator"
 )
 
@@ -18,6 +20,11 @@ type RiderServiceInterface interface {
 	// 配送员注册和认证
 	RegisterRider(rider *model.Rider) error
 	LoginRider(loginInfo, password, loginType string) (string, error)
+
+	// 短信验证相关
+	SendSMSCode(ctx context.Context, phone string) error
+	VerifySMSCode(ctx context.Context, phone, code string) error
+	CanSendSMSCode(ctx context.Context, phone string) (bool, time.Duration, error)
 
 	// 配送员信息管理
 	GetRiderByID(id int64) (*model.Rider, error)
@@ -54,6 +61,7 @@ type RiderServiceInterface interface {
 type RiderService struct {
 	riderRepo  repository.RiderRepositoryInterface
 	jwtService JWTServiceInterface
+	smsService *sms.Service
 }
 
 // #endregion
@@ -64,6 +72,7 @@ type RiderService struct {
 type RiderServiceDependencies struct {
 	RiderRepo  repository.RiderRepositoryInterface
 	JWTService JWTServiceInterface
+	SMSService *sms.Service
 }
 
 // NewRiderService 创建配送员服务实例
@@ -71,6 +80,7 @@ func NewRiderService(deps RiderServiceDependencies) RiderServiceInterface {
 	return &RiderService{
 		riderRepo:  deps.RiderRepo,
 		jwtService: deps.JWTService,
+		smsService: deps.SMSService,
 	}
 }
 
@@ -142,6 +152,68 @@ func (s *RiderService) LoginRider(loginInfo, password, loginType string) (string
 
 	s.logRiderLogin(rider, loginType)
 	return token, nil
+}
+
+// #endregion
+
+// #region 短信验证相关
+
+// SendSMSCode 发送短信验证码
+func (s *RiderService) SendSMSCode(ctx context.Context, phone string) error {
+	if phone == "" {
+		return ErrPhoneEmpty
+	}
+	if !validator.IsPhone(phone) {
+		return ErrPhoneInvalid
+	}
+
+	// 检查配送员是否存在
+	rider, err := s.riderRepo.GetByPhone(phone)
+	if err != nil {
+		return ErrPhoneNotRegistered
+	}
+
+	// 检查配送员状态
+	if !rider.IsActive {
+		return ErrAccountDeactivated
+	}
+
+	// 发送验证码
+	if s.smsService == nil {
+		return ErrSMSSendFailed
+	}
+	if err := s.smsService.SendCode(ctx, phone); err != nil {
+		return err
+	}
+
+	log.Printf("配送员短信发送 - 手机号: %s, 配送员ID: %d, 时间: %s",
+		phone, rider.ID, time.Now().Format("2006-01-02 15:04:05"))
+	return nil
+}
+
+// VerifySMSCode 验证短信验证码
+func (s *RiderService) VerifySMSCode(ctx context.Context, phone, code string) error {
+	if phone == "" || code == "" {
+		return ErrSMSCodeEmpty
+	}
+	if s.smsService == nil {
+		return ErrSMSCodeInvalid
+	}
+	if err := s.smsService.VerifyCode(ctx, phone, code); err != nil {
+		return err
+	}
+	return nil
+}
+
+// CanSendSMSCode 只读检测配送员是否可发送验证码
+func (s *RiderService) CanSendSMSCode(ctx context.Context, phone string) (bool, time.Duration, error) {
+	if phone == "" || !validator.IsPhone(phone) {
+		return false, 0, ErrPhoneInvalid
+	}
+	if s.smsService == nil {
+		return false, 0, ErrSMSSendFailed
+	}
+	return s.smsService.CanSend(ctx, phone)
 }
 
 // #endregion

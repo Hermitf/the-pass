@@ -90,6 +90,8 @@ var (
 	ErrOrderCountRangeInvalid  = errors.New("订单数量范围无效")
 	ErrNoFieldProvided         = errors.New("至少需要提供一个字段")
 	ErrCheckAvailability       = errors.New("检查可用性失败")
+	ErrInvalidPassword         = errors.New("密码错误")
+	ErrUnsupportedLoginType    = errors.New("不支持的登录类型")
 )
 
 // #endregion
